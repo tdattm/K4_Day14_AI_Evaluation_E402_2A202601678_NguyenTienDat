@@ -30,11 +30,11 @@ critical.
 
 | Metric | Acceptable Low Score Scenario | Critical Low Score Scenario | Action Required |
 |---|---|---|---|
-| Faithfulness | | | |
-| Answer Relevance | | | |
-| Context Recall | | | |
-| Context Precision | | | |
-| Completeness | | | |
+| Faithfulness | Câu hỏi ngoài phạm vi và bot từ chối ngắn gọn, nên gần như không dùng context chính sách. | Bot khẳng định sai điều kiện đổi trả/bảo hành, trạng thái thanh toán hoặc thông tin tài khoản mà context không hỗ trợ. | Chặn phát hành; kiểm tra grounding/prompt và bắt buộc trích đúng nguồn chính sách trước khi trả lời. |
+| Answer Relevance | Khách hỏi mơ hồ như “đơn của tôi sao rồi?” và bot yêu cầu mã đơn hoặc làm rõ ý định. | Bot trả lời về sản phẩm khi khách hỏi hoàn tiền, hoặc bỏ qua yêu cầu khóa tài khoản/thanh toán. | Sửa intent routing, bổ sung câu hỏi làm rõ và test các ý định dễ nhầm. |
+| Context Recall | Với câu hỏi ngoài phạm vi, không có evidence nội bộ phù hợp để retrieve là chấp nhận được. | Context thiếu điều khoản đổi trả, thời hạn bảo hành hoặc quy trình hoàn tiền cần để trả lời. | Đây là lỗi retrieval: cải thiện query, coverage tài liệu, chunking hoặc chỉ mục trước khi chỉnh generation. |
+| Context Precision | Truy vấn rộng về danh mục sản phẩm có vài chunk liên quan yếu nhưng câu trả lời vẫn dựa vào chunk đúng. | Các chunk đầu đều nhiễu, làm bot chọn nhầm chính sách hoặc lộ hướng dẫn không liên quan đến tài khoản. | Đây là lỗi retrieval/ranking: thêm filter metadata, hybrid search hoặc reranker; kiểm tra top-k. |
+| Completeness | Khách chỉ hỏi một ý nhỏ và bot trả lời đúng ý đó, dù reference đầy đủ hơn cho tình huống tổng quát. | Bot bỏ sót bước, điều kiện hoặc ngoại lệ quan trọng của đổi trả, bảo hành, thanh toán hay xác minh tài khoản. | Cải thiện generation: prompt checklist theo intent, tổng hợp evidence và kiểm thử các câu hỏi nhiều điều kiện. |
 
 ### Exercise 1.2 — Bias trong LLM-as-a-Judge
 
@@ -46,15 +46,15 @@ Ba bias thường gặp:
 
 **Câu 1: Thiết kế experiment phát hiện position bias với ít nhất hai conditions.**
 
-> *Câu trả lời:*
+> Chuẩn bị cùng một tập question, rubric và hai câu trả lời A/B có chất lượng khác nhau. Condition 1 trình bày A trước rồi B; condition 2 hoán đổi thành B trước rồi A, còn toàn bộ input và rubric giữ nguyên. Chấm nhiều lần với thứ tự ngẫu nhiên, ghi score từng answer và chênh lệch A-B ở hai condition. Nếu một answer tăng điểm một cách nhất quán chỉ vì được đặt đầu, dù nội dung không đổi, judge có position bias; nếu chênh lệch gần như giữ nguyên thì chưa có bằng chứng rõ ràng về bias này.
 
 **Câu 2: Làm thế nào giảm verbosity bias bằng rubric design?**
 
-> *Câu trả lời:*
+> Rubric ưu tiên tính đúng, bám sát evidence chính sách, đủ ý cần thiết và khả năng giúp khách thực hiện bước tiếp theo. Nêu rõ độ dài không được thưởng: câu trả lời ngắn nhưng đúng và có hành động cụ thể có thể đạt điểm cao. Đồng thời trừ điểm khi lan man, lặp lại, thêm claim không được hỗ trợ hoặc che khuất điều kiện quan trọng; yêu cầu judge chấm từng tiêu chí độc lập trước khi tổng hợp.
 
 **Câu 3: Tại sao cần calibrate LLM judge với human labels?**
 
-> *Câu trả lời:*
+> Human labels là chuẩn tham chiếu để đo tương quan giữa judge và đánh giá nghiệp vụ. Calibration giúp phát hiện lệch hệ thống, ví dụ judge quá dễ với câu trả lời dài hoặc quá khắt khe với câu từ chối đúng chính sách; từ đó điều chỉnh rubric, prompt và threshold. Chỉ khi mức đồng thuận đủ tốt, score tự động mới đáng tin để làm quality gate và theo dõi regression.
 
 ### Exercise 1.3 — Evaluation trong CI/CD
 
@@ -62,13 +62,13 @@ Ba bias thường gặp:
 
 | Metric | Threshold | Lý do |
 |---|---:|---|
-| Faithfulness | | |
-| Answer Relevance | | |
-| Completeness | | |
+| Faithfulness | 0.90 | Nghiêm ngặt nhất vì sai chính sách đổi trả/bảo hành, thanh toán hay tài khoản có thể gây thiệt hại và mất niềm tin; câu trả lời phải được evidence hỗ trợ. |
+| Answer Relevance | 0.80 | Bot phải giải quyết đúng intent hoặc yêu cầu làm rõ hợp lý; câu trả lời lệch chủ đề làm tăng ticket và thời gian xử lý. |
+| Completeness | 0.80 | Cần nêu đủ điều kiện, bước thực hiện và ngoại lệ chính để khách tự hành động, nhưng cho phép khác biệt diễn đạt so với reference. |
 
 **Câu 2: Khi nào dùng offline evaluation, online evaluation và human review?**
 
-> *Câu trả lời:*
+> Dùng offline evaluation trước khi merge/release: chạy golden set gồm câu hỏi đổi trả, bảo hành, thanh toán và tài khoản để chặn regression có thể lặp lại. Dùng online evaluation sau khi triển khai để theo dõi traffic thật, tỷ lệ fallback/escalation, feedback khách hàng và các intent mới; ví dụ phát hiện truy vấn về một chương trình khuyến mãi vừa thay đổi. Dùng human review cho case rủi ro cao hoặc mơ hồ như tranh chấp thanh toán, yêu cầu liên quan dữ liệu cá nhân, chính sách chưa có evidence và mẫu lỗi mới. Ba lớp bổ sung nhau: offline phòng lỗi đã biết, online phát hiện drift thực tế, còn human review xác nhận các quyết định nhạy cảm và tạo nhãn để cải thiện hai lớp kia.
 
 ---
 
